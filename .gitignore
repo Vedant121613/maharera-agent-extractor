@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files - DO NOT COMMIT TO GITHUB
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Logs - DO NOT COMMIT
+logs/
+*.log
+*.log.*
+
+# Output files
+output/
+*.xlsx
+*.csv
+
+# Environment variables - KEEP API KEYS SECRET
+.env
+
+# Temporary files
+*.tmp
+captcha_debug.png
+test_openai.py
+check_*.py
+monitor_*.py
+captcha_stats.py
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# AWS keys
+*.pem
+*.ppk
+
+# Compressed files
+*.zip
+*.tar.gz
+*.rar
