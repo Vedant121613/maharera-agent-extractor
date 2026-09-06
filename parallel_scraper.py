@@ -55,22 +55,30 @@ class ParallelScraper:
         
         local_stats = {"collected": 0, "failed": 0, "skipped": 0, "total": 0}
         captcha = CaptchaHandler()
+        bm = None
+        search_page = None
+        detail_page = None
         
         try:
-            with BrowserManager(headless=self.headless) as bm:
-                search_page = bm.new_page()
-                detail_page = bm.new_page()
+            # Initialize browser with explicit context
+            bm = BrowserManager(headless=self.headless)
+            bm.__enter__()
+            
+            search_page = bm.new_page()
+            detail_page = bm.new_page()
+            
+            # Navigate to search results
+            bm.navigate(search_page, Config.AGENT_SEARCH_URL)
+            captcha.handle_captcha(search_page)
                 
-                # Navigate to search results
-                bm.navigate(search_page, Config.AGENT_SEARCH_URL)
-                captcha.handle_captcha(search_page)
+            
+            search_scraper = SearchPageScraper(search_page)
+            
+            # Process each assigned page
+            for page_num in page_range:
+                worker_logger.info(f"📄 Worker {worker_id} - Page {page_num}")
                 
-                search_scraper = SearchPageScraper(search_page)
-                
-                # Process each assigned page
-                for page_num in page_range:
-                    worker_logger.info(f"📄 Worker {worker_id} - Page {page_num}")
-                    
+                try:
                     # Navigate to page
                     if page_num > 1:
                         ok = search_scraper.navigate_to_page(page_num)
@@ -114,6 +122,11 @@ class ParallelScraper:
                         # Navigate to detail page
                         detail_url = Config.get_detail_url(agent_id)
                         try:
+                            # Check if page is still open
+                            if detail_page.is_closed():
+                                worker_logger.error(f"Detail page was closed, reopening...")
+                                detail_page = bm.new_page()
+                            
                             # Set up API response capture
                             api_responses = []
                             
@@ -229,11 +242,48 @@ class ParallelScraper:
                             self.db.mark_failed(agent_id, str(exc)[:500])
                             local_stats["failed"] += 1
                             worker_logger.error(f"❌ Agent {agent_id} - {type(exc).__name__}: {exc}")
+                
+                except Exception as page_exc:
+                    worker_logger.error(f"Error processing page {page_num}: {type(page_exc).__name__}: {page_exc}")
+                    # Try to recover by recreating pages
+                    try:
+                        if search_page and search_page.is_closed():
+                            search_page = bm.new_page()
+                            bm.navigate(search_page, Config.AGENT_SEARCH_URL)
+                            captcha.handle_captcha(search_page)
+                            search_scraper = SearchPageScraper(search_page)
+                        if detail_page and detail_page.is_closed():
+                            detail_page = bm.new_page()
+                    except Exception as recovery_exc:
+                        worker_logger.error(f"Failed to recover: {recovery_exc}")
+                        break  # Exit the page loop if we can't recover
         
+        
+        except KeyboardInterrupt:
+            worker_logger.info(f"Worker {worker_id} interrupted by user")
         except Exception as exc:
             worker_logger.error(f"Worker {worker_id} fatal error: {exc}", exc_info=True)
         
         finally:
+            # Cleanup browser resources
+            try:
+                if detail_page and not detail_page.is_closed():
+                    detail_page.close()
+            except:
+                pass
+            
+            try:
+                if search_page and not search_page.is_closed():
+                    search_page.close()
+            except:
+                pass
+            
+            try:
+                if bm:
+                    bm.__exit__(None, None, None)
+            except:
+                pass
+            
             # Update global stats
             with self.stats_lock:
                 self.stats["total_agents"] += local_stats["total"]

@@ -39,9 +39,6 @@ output/
 *.tmp
 captcha_debug.png
 test_openai.py
-check_*.py
-monitor_*.py
-captcha_stats.py
 
 # OS files
 .DS_Store
